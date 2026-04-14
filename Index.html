@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hand VFX Camera Test</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<style>
+body {
+  margin:0;
+  background:black;
+  overflow:hidden;
+}
+
+video, canvas {
+  position:absolute;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  transform:scaleX(-1);
+}
+
+#startBtn {
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  padding:20px 40px;
+  font-size:20px;
+  background:cyan;
+  border:none;
+  border-radius:30px;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<button id="startBtn">Start Camera</button>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const startBtn = document.getElementById("startBtn");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// 🔥 Particle
+class Particle {
+  constructor(x,y){
+    this.x=x;
+    this.y=y;
+    this.vx=(Math.random()-0.5)*5;
+    this.vy=(Math.random()-0.5)*5;
+    this.life=1;
+  }
+
+  update(){
+    this.x+=this.vx;
+    this.y+=this.vy;
+    this.life-=0.02;
+  }
+
+  draw(){
+    ctx.globalAlpha=this.life;
+    ctx.fillStyle="cyan";
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,5,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+let particles=[];
+
+// 🔥 MediaPipe setup
+const hands = new Hands({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+hands.onResults(results => {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(results.multiHandLandmarks){
+    results.multiHandLandmarks.forEach(hand=>{
+      let index = hand[8];
+      let x = index.x * canvas.width;
+      let y = index.y * canvas.height;
+
+      // spawn particles
+      for(let i=0;i<5;i++){
+        particles.push(new Particle(x,y));
+      }
+    });
+  }
+
+  particles.forEach(p=>{
+    p.update();
+    p.draw();
+  });
+
+  particles = particles.filter(p=>p.life>0);
+});
+
+// 🎥 Start camera (Permission trigger)
+startBtn.onclick = async () => {
+  startBtn.style.display="none";
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+
+    const camera = new Camera(video,{
+      onFrame: async () => {
+        await hands.send({image: video});
+      },
+      width: 640,
+      height: 480
+    });
+
+    camera.start();
+
+  } catch(err) {
+    alert("Camera permission denied ❌");
+  }
+};
+</script>
+
+</body>
+</html>
